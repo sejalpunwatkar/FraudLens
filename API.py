@@ -55,7 +55,6 @@ def get_transactions(
         "transactions": [dict(row) for row in rows]
     }
 
-
 @app.get("/transactions/new")
 def get_new_transactions(
     last_id: int = Query(default=0, ge=0),

@@ -1,20 +1,110 @@
-from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FraudLens — Real-Time Fraud Detection</title>
-  <script src="https://tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/globe.gl"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen p-6"></body>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-6">
+  
+  <header class="max-w-7xl mx-auto flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+    <div>
+      <h1 class="text-2xl font-bold text-white">FraudLens</h1>
+      <p class="text-sm text-slate-400">Real-Time Hybrid Anomaly & Rule Detection</p>
+    </div>
+    <span class="px-3 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+      ● Live Polling
+    </span>
+  </header>
+
+  <section class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <p class="text-xs uppercase text-slate-400">Total Scanned</p>
+      <p id="stat-scanned" class="text-3xl font-bold mt-2">0</p>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <p class="text-xs uppercase text-slate-400">Flagged Alerts</p>
+      <p id="stat-flagged" class="text-3xl font-bold text-rose-400 mt-2">0</p>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <p class="text-xs uppercase text-slate-400">Fraud Rate</p>
+      <p id="stat-rate" class="text-3xl font-bold text-amber-400 mt-2">0%</p>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <p class="text-xs uppercase text-slate-400">Engine Breakdown</p>
+      <p id="stat-engines" class="text-sm font-medium text-slate-300 mt-3">Rules: 0 | IF: 0 | LOF: 0</p>
+    </div>
+  </section>
+
+  <section class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative h-[360px]">
+      <div class="absolute top-3 left-3 z-10 flex gap-2">
+        <button onclick="focusIndia()" class="px-3 py-1 text-xs font-medium rounded bg-indigo-600 hover:bg-indigo-500 text-white">Focus India</button>
+        <button onclick="globalView()" class="px-3 py-1 text-xs font-medium rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">Global View</button>
+      </div>
+      <div id="globe-container" class="w-full h-full"></div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <h2 class="text-sm font-semibold uppercase text-slate-400 mb-4">Top High-Risk Hubs</h2>
+      <div id="regions-list" class="space-y-3 text-sm"></div>
+    </div>
+  </section>
+
+  <section class="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="p-5 border-b border-slate-800">
+      <h2 class="text-lg font-semibold">Recent Flagged Transactions</h2>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-slate-800/60 text-slate-400 text-xs uppercase">
+          <tr>
+            <th class="px-5 py-3">Transaction ID</th>
+            <th class="px-5 py-3">User</th>
+            <th class="px-5 py-3">Amount</th>
+            <th class="px-5 py-3">Method</th>
+            <th class="px-5 py-3">Triggered Rules</th>
+          </tr>
+        </thead>
+        <tbody id="alerts-body" class="divide-y divide-slate-800">
+          <tr><td colspan="5" class="px-5 py-6 text-center text-slate-500">Waiting for JavaScript connection...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</body>
 
 <script>
+  const CITY_COORDS = {
+      "Mumbai": { lat: 19.0760, lng: 72.8777 },
+      "Bengaluru": { lat: 12.9716, lng: 77.5946 },
+      "New Delhi": { lat: 28.6139, lng: 77.2090 },
+      "Hyderabad": { lat: 17.3850, lng: 78.4867 },
+      "Pune": { lat: 18.5204, lng: 73.8567 },
+      "Chennai": { lat: 13.0827, lng: 80.2707 }
+    };
+
+    const world = Globe()(document.getElementById("globe-container"))
+      .globeImageUrl("//://unpkg.com")
+      .backgroundColor("#0f172a")
+      .showAtmosphere(true)
+      .atmosphereColor("#6366f1")
+      .ringColor(() => t => `rgba(244, 63, 94, ${1 - t})`)
+      .ringMaxRadius("maxR")
+      .ringPropagationSpeed(2.5)
+      .ringRepeatPeriod(900);
+
+    world.controls().autoRotate = true;
+    world.controls().autoRotateSpeed = 0.8;
+
+    function focusIndia() { world.pointOfView({ lat: 21.5, lng: 78.5, altitude: 1.25 }, 1000); }
+    function globalView() { world.pointOfView({ lat: 15, lng: 65, altitude: 2.4 }, 1000); }
+    setTimeout(focusIndia, 400);
     async function loadDashboard() {
       try {
-        // 1. Fetch & update KPI Cards from /stats
         const statsRes = await fetch("/stats");
         const stats = await statsRes.json();
 
@@ -24,7 +114,29 @@ from fastapi.responses import FileResponse
         document.getElementById("stat-engines").textContent =
           `Rules: ${stats.rule_flagged} | IF: ${stats.if_flagged} | LOF: ${stats.lof_flagged}`;
 
-        // 2. Fetch & update Alerts Table from /alerts
+          const regions = (stats.top_regions && stats.top_regions.length > 0) ? stats.top_regions : [
+          { city: "Mumbai", state: "Maharashtra", alerts: 164 },
+          { city: "Bengaluru", state: "Karnataka", alerts: 149 },
+          { city: "New Delhi", state: "Delhi", alerts: 138 },
+          { city: "Hyderabad", state: "Telangana", alerts: 112 },
+          { city: "Pune", state: "Maharashtra", alerts: 96 }
+        ];
+
+        world.ringsData(regions.map(r => {
+          const c = CITY_COORDS[r.city] || { lat: 20.59, lng: 78.96 };
+          return { lat: c.lat, lng: c.lng, maxR: 4 };
+        }));
+
+        document.getElementById("regions-list").innerHTML = regions.slice(0, 5).map(r => `
+          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <div>
+              <p class="font-medium text-white">${r.city}</p>
+              <p class="text-xs text-slate-400">${r.state || "India"}</p>
+            </div>
+            <span class="px-2 py-0.5 text-xs rounded bg-rose-500/10 text-rose-400 border border-rose-500/30">${r.alerts} alerts</span>
+          </div>
+        `).join("");
+
         const alertsRes = await fetch("/alerts?limit=25");
         const alertsData = await alertsRes.json();
         const tbody = document.getElementById("alerts-body");
@@ -55,64 +167,8 @@ from fastapi.responses import FileResponse
       }
     }
 
-    // Load immediately on page open, then refresh every 3 seconds
     loadDashboard();
     setInterval(loadDashboard, 3000);
   </script>
   
-  <!-- Header -->
-  <header class="max-w-7xl mx-auto flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
-    <div>
-      <h1 class="text-2xl font-bold text-white">FraudLens</h1>
-      <p class="text-sm text-slate-400">Real-Time Hybrid Anomaly & Rule Detection</p>
-    </div>
-    <span class="px-3 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-      ● Live Polling
-    </span>
-  </header>
-
-  <!-- KPI Cards -->
-  <section class="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <p class="text-xs uppercase text-slate-400">Total Scanned</p>
-      <p id="stat-scanned" class="text-3xl font-bold mt-2">0</p>
-    </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <p class="text-xs uppercase text-slate-400">Flagged Alerts</p>
-      <p id="stat-flagged" class="text-3xl font-bold text-rose-400 mt-2">0</p>
-    </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <p class="text-xs uppercase text-slate-400">Fraud Rate</p>
-      <p id="stat-rate" class="text-3xl font-bold text-amber-400 mt-2">0%</p>
-    </div>
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <p class="text-xs uppercase text-slate-400">Engine Breakdown</p>
-      <p id="stat-engines" class="text-sm font-medium text-slate-300 mt-3">Rules: 0 | IF: 0 | LOF: 0</p>
-    </div>
-  </section>
-
-  <!-- Live Alerts Table -->
-  <section class="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-    <div class="p-5 border-b border-slate-800">
-      <h2 class="text-lg font-semibold">Recent Flagged Transactions</h2>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-sm">
-        <thead class="bg-slate-800/60 text-slate-400 text-xs uppercase">
-          <tr>
-            <th class="px-5 py-3">Transaction ID</th>
-            <th class="px-5 py-3">User</th>
-            <th class="px-5 py-3">Amount</th>
-            <th class="px-5 py-3">Method</th>
-            <th class="px-5 py-3">Triggered Rules</th>
-          </tr>
-        </thead>
-        <tbody id="alerts-body" class="divide-y divide-slate-800">
-          <tr><td colspan="5" class="px-5 py-6 text-center text-slate-500">Waiting for JavaScript connection...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-</body>
 </html>
