@@ -1,6 +1,8 @@
 
 from fastapi import FastAPI, Query
+from fastapi.responses import FileResponse
 import sqlite3 as sq
+import json
 
 app = FastAPI(title="FraudLens API")
 
@@ -71,3 +73,83 @@ def get_transaction_count():
         """).fetchone()[0]
 
     return {"total_cleaned_transactions": total}
+
+@app.get("/alerts")
+def get_alerts(
+    limit: int = Query(default=100, ge=1, le=1000),
+    flagged_only: bool = Query(default=True)
+):
+    try:
+        with get_connection() as conn:
+            if flagged_only:
+                rows = conn.execute("""
+                    SELECT * FROM fraud_detection_results
+                    WHERE is_flagged = 1
+                    ORDER BY source_rowid DESC
+                    LIMIT ?
+                """, (limit,)).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT * FROM fraud_detection_results
+                    ORDER BY source_rowid DESC
+                    LIMIT ?
+                """, (limit,)).fetchall()
+
+        alerts = []
+        for row in rows:
+            item = dict(row)
+            item["triggered_rules"] = json.loads(item.get("triggered_rules") or "[]")
+            item["data_quality_issues"] = json.loads(item.get("data_quality_issues") or "[]")
+            alerts.append(item)
+
+        return {"count": len(alerts), "alerts": alerts}
+    except sq.OperationalError:
+        return {"count": 0, "alerts": []}
+
+
+@app.get("/stats")
+def get_stats():
+    try:
+        with get_connection() as conn:
+            row = conn.execute("""
+                SELECT
+                    COUNT(*) AS total_scanned,
+                    COALESCE(SUM(is_flagged), 0) AS total_flagged,
+                    COALESCE(SUM(CASE WHEN rule_count > 0 THEN 1 ELSE 0 END), 0) AS rule_flagged,
+                    COALESCE(SUM(if_flagged), 0) AS if_flagged,
+                    COALESCE(SUM(lof_flagged), 0) AS lof_flagged
+                FROM fraud_detection_results
+            """).fetchone()
+
+            region_rows = conn.execute("""
+                SELECT city, state, COUNT(*) AS alerts
+                FROM fraud_detection_results
+                WHERE is_flagged = 1 AND city IS NOT NULL
+                GROUP BY city, state
+                ORDER BY alerts DESC
+                LIMIT 10
+            """).fetchall()
+
+        total_scanned = row["total_scanned"]
+        total_flagged = row["total_flagged"]
+        fraud_rate = round((total_flagged / total_scanned) * 100, 2) if total_scanned > 0 else 0.0
+
+        return {
+            "total_scanned": total_scanned,
+            "total_flagged": total_flagged,
+            "fraud_rate_percent": fraud_rate,
+            "rule_flagged": row["rule_flagged"],
+            "if_flagged": row["if_flagged"],
+            "lof_flagged": row["lof_flagged"],
+            "top_regions": [dict(r) for r in region_rows]
+        }
+    except sq.OperationalError:
+        return {
+            "total_scanned": 0,
+            "total_flagged": 0,
+            "fraud_rate_percent": 0.0,
+            "rule_flagged": 0,
+            "if_flagged": 0,
+            "lof_flagged": 0,
+            "top_regions": []
+        }
