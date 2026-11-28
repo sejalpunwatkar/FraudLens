@@ -5,7 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FraudLens — Real-Time Fraud Detection</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/globe.gl"></script>
+  <script src="https://jsdelivr.net"></script>
+   <script>
+    const loadLib = p => document.write('<scr' + 'ipt src="https://cdn.' + 'jsdelivr.net/npm/' + p + '"></scr' + 'ipt>');
+    loadLib('chart.js');
+    loadLib('globe.gl');
+  </script>
+
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen p-6">
   
@@ -53,7 +59,74 @@
     </div>
   </section>
 
-  <section class="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+  <section class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="flex justify-between items-center text-xs uppercase text-purple-400">
+        <span>Deterministic Rules</span>
+        <span id="share-rules" class="text-slate-400">0% share</span>
+      </div>
+      <div class="flex justify-between items-baseline mt-2">
+        <h3 class="text-base font-bold text-white">Rule Engine Triggers</h3>
+        <span id="count-rules" class="text-2xl font-bold text-purple-400">0</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Real-time guardrails catching velocity bursts, spending spikes, and unfamiliar device/IP pairs.</p>
+      <div class="flex flex-wrap gap-1.5 mt-4">
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">Velocity >= 5/hr</span>
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">Amount Ratio >= 3x</span>
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">New Device + IP</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="flex justify-between items-center text-xs uppercase text-sky-400">
+        <span>Unsupervised Ensemble</span>
+        <span id="share-if" class="text-slate-400">0% share</span>
+      </div>
+      <div class="flex justify-between items-baseline mt-2">
+        <h3 class="text-base font-bold text-white">Isolation Forest</h3>
+        <span id="count-if" class="text-2xl font-bold text-sky-400">0</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Tree-based multivariate outlier isolation partitioning extreme behavioral vectors.</p>
+      <div class="flex flex-wrap gap-1.5 mt-4">
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">n_estimators=200</span>
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">contamination=0.02</span>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="flex justify-between items-center text-xs uppercase text-indigo-400">
+        <span>Density Deviation</span>
+        <span id="share-lof" class="text-slate-400">0% share</span>
+      </div>
+      <div class="flex justify-between items-baseline mt-2">
+        <h3 class="text-base font-bold text-white">Local Outlier Factor</h3>
+        <span id="count-lof" class="text-2xl font-bold text-indigo-400">0</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Measures local reachability density deviation relative to peer transaction clusters.</p>
+      <div class="flex flex-wrap gap-1.5 mt-4">
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">n_neighbors=35</span>
+        <span class="px-2 py-0.5 text-[11px] rounded bg-slate-800 text-slate-300 border border-slate-700">novelty=True</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <h2 class="text-sm font-semibold uppercase text-slate-400 mb-4">Detection Engine Distribution</h2>
+      <div class="h-64 flex items-center justify-center">
+        <canvas id="engineChart"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <h2 class="text-sm font-semibold uppercase text-slate-400 mb-4">Top High-Risk Cities (Alert Volume)</h2>
+      <div class="h-64">
+        <canvas id="regionChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section class="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mt-8">
     <div class="p-5 border-b border-slate-800">
       <h2 class="text-lg font-semibold">Recent Flagged Transactions</h2>
     </div>
@@ -75,10 +148,8 @@
     </div>
   </section>
 
-</body>
-
-<script>
-  const CITY_COORDS = {
+  <script>
+    const CITY_COORDS = {
       "Mumbai": { lat: 19.0760, lng: 72.8777 },
       "Bengaluru": { lat: 12.9716, lng: 77.5946 },
       "New Delhi": { lat: 28.6139, lng: 77.2090 },
@@ -87,8 +158,11 @@
       "Chennai": { lat: 13.0827, lng: 80.2707 }
     };
 
-    const world = Globe()(document.getElementById("globe-container"))
-      .globeImageUrl("//://unpkg.com")
+    const globeContainer = document.getElementById("globe-container");
+    const world = Globe()(globeContainer)
+      .width(globeContainer.offsetWidth || 700)
+      .height(360)
+      .globeImageUrl("https://jsdelivr.net" + "earth-night.jpg")
       .backgroundColor("#0f172a")
       .showAtmosphere(true)
       .atmosphereColor("#6366f1")
@@ -99,10 +173,52 @@
 
     world.controls().autoRotate = true;
     world.controls().autoRotateSpeed = 0.8;
+    window.addEventListener("resize", () => world.width(globeContainer.offsetWidth));
 
     function focusIndia() { world.pointOfView({ lat: 21.5, lng: 78.5, altitude: 1.25 }, 1000); }
     function globalView() { world.pointOfView({ lat: 15, lng: 65, altitude: 2.4 }, 1000); }
     setTimeout(focusIndia, 400);
+
+    const engineChart = new Chart(document.getElementById("engineChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["Rule Engine", "Isolation Forest", "Local Outlier Factor"],
+        datasets: [{
+          data:new Array(3).fill(0),
+          backgroundColor: ["#a855f7", "#38bdf8", "#818cf8"],
+          borderColor: "#0f172a",
+          borderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: "#cbd5e1" } } }
+      }
+    });
+
+    const regionChart = new Chart(document.getElementById("regionChart"), {
+      type: "bar",
+      data: {
+        labels: [],
+        datasets: [{
+          label: "Flagged Alerts",
+          data: [],
+          backgroundColor: "#f43f5e",
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#94a3b8" }, grid: { display: false } },
+          y: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } }
+        }
+      }
+    });
+    
     async function loadDashboard() {
       try {
         const statsRes = await fetch("/stats");
@@ -114,7 +230,15 @@
         document.getElementById("stat-engines").textContent =
           `Rules: ${stats.rule_flagged} | IF: ${stats.if_flagged} | LOF: ${stats.lof_flagged}`;
 
-          const regions = (stats.top_regions && stats.top_regions.length > 0) ? stats.top_regions : [
+        const totalHits = Math.max(stats.rule_flagged + stats.if_flagged + stats.lof_flagged, 1);
+        document.getElementById("count-rules").textContent = stats.rule_flagged.toLocaleString();
+        document.getElementById("count-if").textContent = stats.if_flagged.toLocaleString();
+        document.getElementById("count-lof").textContent = stats.lof_flagged.toLocaleString();
+        document.getElementById("share-rules").textContent = ((stats.rule_flagged / totalHits) * 100).toFixed(1) + "% share";
+        document.getElementById("share-if").textContent = ((stats.if_flagged / totalHits) * 100).toFixed(1) + "% share";
+        document.getElementById("share-lof").textContent = ((stats.lof_flagged / totalHits) * 100).toFixed(1) + "% share";
+
+        const regions = (stats.top_regions && stats.top_regions.length > 0) ? stats.top_regions : [
           { city: "Mumbai", state: "Maharashtra", alerts: 164 },
           { city: "Bengaluru", state: "Karnataka", alerts: 149 },
           { city: "New Delhi", state: "Delhi", alerts: 138 },
@@ -126,6 +250,14 @@
           const c = CITY_COORDS[r.city] || { lat: 20.59, lng: 78.96 };
           return { lat: c.lat, lng: c.lng, maxR: 4 };
         }));
+
+        engineChart.data.datasets[0].data = [stats.rule_flagged, stats.if_flagged, stats.lof_flagged];
+        engineChart.update();
+
+        const top5 = regions.slice(0, 5);
+        regionChart.data.labels = top5.map(r => r.city);
+        regionChart.data.datasets[0].data = top5.map(r => r.alerts);
+        regionChart.update();
 
         document.getElementById("regions-list").innerHTML = regions.slice(0, 5).map(r => `
           <div class="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -161,7 +293,6 @@
             </td>
           </tr>
         `).join("");
-
       } catch (err) {
         console.error("Dashboard fetch error:", err);
       }
@@ -170,5 +301,5 @@
     loadDashboard();
     setInterval(loadDashboard, 3000);
   </script>
-  
+</body>
 </html>
